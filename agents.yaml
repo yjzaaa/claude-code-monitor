@@ -1,0 +1,64 @@
+# Agent Hub - Agent Configuration
+agents:
+  claude-code:
+    name: "Claude Code"
+    command: "claude"
+    icon: "\u2b22"
+    color: "#d97706"
+    bg_color: "#78350f"
+    shell: false
+    description: "Anthropic Claude coding agent"
+
+  codex:
+    name: "OpenAI Codex"
+    command: "codex"
+    icon: "\u25c8"
+    color: "#10a37f"
+    bg_color: "#064e3b"
+    shell: false
+    description: "OpenAI Codex CLI agent"
+
+  opencode:
+    name: "OpenCode"
+    command: "opencode"
+    icon: "\u25a3"
+    color: "#8b5cf6"
+    bg_color: "#3b0764"
+    shell: false
+    description: "OpenCode AI coding assistant"
+
+  aider:
+    name: "Aider"
+    command: "aider"
+    icon: "\u25c7"
+    color: "#ef4444"
+    bg_color: "#7f1d1d"
+    shell: false
+    description: "AI pair programming in your terminal"
+
+  gemini:
+    name: "Gemini CLI"
+    command: "gemini"
+    icon: "\u2726"
+    color: "#3b82f6"
+    bg_color: "#1e3a5f"
+    shell: false
+    description: "Google Gemini command line tool"
+
+  goose:
+    name: "Goose"
+    command: "goose"
+    icon: "\u2b22"
+    color: "#f59e0b"
+    bg_color: "#78350f"
+    shell: false
+    description: "Block Goose AI agent"
+
+  copilot:
+    name: "GitHub Copilot"
+    command: "github-copilot-cli"
+    icon: "\u2615"
+    color: "#6e7681"
+    bg_color: "#30363d"
+    shell: false
+    description: "GitHub Copilot CLI"
