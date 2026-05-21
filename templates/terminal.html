@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Claude Code Terminal</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#0d1117; height:100vh; display:flex; flex-direction:column; }
+  .toolbar { display:flex; gap:6px; padding:8px; border-bottom:1px solid #30363d; flex-wrap:wrap; justify-content:center; }
+  .toolbar button { background:#161b22; border:1px solid #30363d; color:#e6edf3; border-radius:6px; padding:8px 14px; font-size:13px; cursor:pointer; }
+  .toolbar button:active { background:#30363d; }
+  iframe { flex:1; border:none; width:100%; }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <button onclick="sendKey('Escape')">Esc</button>
+  <button onclick="sendKey('C-c')">Ctrl+C</button>
+  <button onclick="sendKey('Enter')">Enter</button>
+  <button onclick="sendKey('Tab')">Tab</button>
+  <button onclick="sendKey('Up')">Up</button>
+  <button onclick="sendKey('Down')">Down</button>
+  <button onclick="sendKey('C-l')">Clear</button>
+  <button onclick="goBack()">&#8592; 返回</button>
+</div>
+<iframe src="{{TTYD_URL}}"></iframe>
+<script>
+function sendKey(key) {
+  fetch('/key', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({key})});
+}
+function goBack() { window.location.href = '/'; }
+</script>
+</body>
+</html>

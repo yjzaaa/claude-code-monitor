@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Claude Code Monitor</title>
+<link rel="stylesheet" href="/static/xterm.css">
+<style>
+:root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--green:#3fb950;--yellow:#d29922;--red:#f85149;--blue:#58a6ff}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,Segoe UI,sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.header{padding:10px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;min-height:44px}
+.header h1{font-size:16px;font-weight:600}
+.header-right{display:flex;align-items:center;gap:8px}
+.status-dot{width:8px;height:8px;border-radius:50%}
+.dot-green{background:var(--green);box-shadow:0 0 6px var(--green)}
+.dot-red{background:var(--red)}
+.dot-yellow{background:var(--yellow);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.tabs{display:flex;border-bottom:1px solid var(--border);flex-shrink:0}
+.tab{flex:1;padding:10px;text-align:center;font-size:13px;font-weight:500;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;user-select:none}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.tab-content{display:none;flex:1;overflow:hidden}
+.tab-content.active{display:flex;flex-direction:column}
+.terminal-wrapper{flex:1;overflow:hidden;position:relative;cursor:text}
+.terminal-wrapper .xterm{height:100%}
+.terminal-wrapper .xterm-screen{touch-action:manipulation}
+.terminal-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.7);z-index:10}
+.start-btn{background:var(--blue);color:#fff;border:none;border-radius:12px;padding:16px 32px;font-size:16px;font-weight:600;cursor:pointer}
+.start-btn:active{opacity:0.8}
+.mobile-bar{display:flex;gap:4px;padding:4px 8px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;align-items:center;flex-wrap:wrap;justify-content:center}
+.mobile-bar input{flex:1;min-width:80px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:7px 10px;color:var(--text);font-size:16px;outline:none}
+.mobile-bar input:focus{border-color:var(--blue)}
+.mobile-bar button{background:var(--blue);border:none;color:#fff;border-radius:6px;padding:7px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+.mobile-bar button:active{opacity:0.8}
+.qk-btn{background:var(--bg)!important;border:1px solid var(--border)!important;color:var(--text)!important;min-width:36px;padding:7px 10px!important}
+.dashboard-scroll{flex:1;overflow-y:auto;padding-bottom:20px}
+.cards{padding:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px}
+.card-label{font-size:11px;color:var(--text2);margin-bottom:4px}
+.card-value{font-size:20px;font-weight:700}
+.card.full{grid-column:1/-1}
+.tool-item{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px}
+.tool-count{background:var(--border);padding:1px 7px;border-radius:10px;font-size:11px}
+.events{padding:10px}
+.event-title{font-size:13px;font-weight:600;margin-bottom:8px}
+.event-list{max-height:40vh;overflow-y:auto}
+.event-item{padding:6px 10px;border-bottom:1px solid var(--border);font-size:12px;display:flex;gap:8px;align-items:center}
+.event-time{color:var(--text2);white-space:nowrap;font-family:monospace;font-size:11px}
+.event-type{padding:1px 5px;border-radius:3px;font-size:10px;font-weight:600;white-space:nowrap}
+.ev-tool{background:rgba(88,166,255,.15);color:var(--blue)}
+.ev-stop{background:rgba(248,81,73,.15);color:var(--red)}
+.ev-start{background:rgba(63,185,80,.15);color:var(--green)}
+.ev-input{background:rgba(210,153,34,.15);color:var(--yellow)}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Claude Code</h1>
+  <div class="header-right">
+    <span id="connDot" class="status-dot dot-yellow"></span>
+    <span id="statusBadge" style="font-size:12px;color:var(--text2);">连接中</span>
+  </div>
+</div>
+<div class="tabs">
+  <div class="tab active" data-tab="terminal" onclick="switchTab('terminal')">终端</div>
+  <div class="tab" data-tab="dashboard" onclick="switchTab('dashboard')">监控</div>
+</div>
+<input id="hiddenInput" type="text" autocorrect="off" autocapitalize="off" spellcheck="false"
+  style="position:fixed;top:-100px;left:0;width:1px;height:1px;opacity:0.01;font-size:16px;z-index:-1;">
+<div id="tab-terminal" class="tab-content active">
+  <div class="terminal-wrapper" id="terminalWrapper">
+    <div id="terminalOverlay" class="terminal-overlay">
+      <button class="start-btn" onclick="startTerminal()">启动 Claude Code</button>
+    </div>
+    <div id="xtermContainer" style="width:100%;height:100%;"></div>
+  </div>
+</div>
+<div id="tab-dashboard" class="tab-content">
+  <div class="dashboard-scroll">
+    <div class="cards">
+      <div class="card"><div class="card-label">状态</div><div id="statusText" class="card-value" style="color:var(--text2);">--</div></div>
+      <div class="card"><div class="card-label">运行时长</div><div id="uptimeText" class="card-value">0:00</div></div>
+      <div class="card"><div class="card-label">工具调用</div><div id="totalTools" class="card-value">0</div></div>
+      <div class="card"><div class="card-label">事件数</div><div id="eventCount" class="card-value">0</div></div>
+      <div class="card full">
+        <div class="card-label">工具统计</div>
+        <div id="toolList" class="tool-list"><div style="color:var(--text2);font-size:12px;text-align:center;padding:12px;">等待数据...</div></div>
+      </div>
+    </div>
+    <div class="events">
+      <div class="event-title">事件日志</div>
+      <div id="eventList" class="event-list"></div>
+    </div>
+  </div>
+</div>
+<div id="mobileBar" class="mobile-bar">
+  <button class="qk-btn" onclick="sendKey('Escape')">Esc</button>
+  <button class="qk-btn" onclick="sendKey('C-c')">Ctrl+C</button>
+  <button class="qk-btn" onclick="sendKey('Tab')">Tab</button>
+  <button class="qk-btn" onclick="sendKey('Up')">Up</button>
+  <button class="qk-btn" onclick="sendKey('Down')">Dn</button>
+  <button class="qk-btn" id="voiceBtn" onclick="toggleVoice()" style="font-size:16px;">MIC</button>
+  <input id="inputText" type="text" placeholder="输入指令..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+  <button onclick="sendText()">发送</button>
+</div>
+<script src="/static/xterm.js"></script>
+<script src="/static/xterm-addon-fit.js"></script>
+<script>
+var _t={"connected":"已连接","disconnected":"断开","idle":"空闲","running":"运行中","error":"错误","waiting":"等待数据...","toolPrefix":"工具: ","voiceLabel":"[语音] ","voiceStart":"开始监听...说话即可输入","voiceStop":"已停止","voiceErr":"网络错误，语音识别需要网络连接","voiceNotSupport":"当前浏览器不支持语音识别，请使用 Chrome 或 Edge","processExit":"[进程已退出]","starting":"启动中...","startFail":"启动失败，重试","connFail":"连接失败，重试"};
+var term=null,fitAddon=null,ws=null,wsConnected=false;
+function switchTab(n){document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active')});document.querySelector('.tab[data-tab="'+n+'"]').classList.add('active');document.getElementById('tab-'+n).classList.add('active');document.getElementById('mobileBar').style.display=(n==='terminal')?'flex':'none';if(n==='terminal'&&fitAddon&&term)setTimeout(function(){fitAddon.fit()},100)}
+function initTerminal(){if(term)return;term=new Terminal({theme:{background:'#0d1117',foreground:'#e6edf3',cursor:'#58a6ff',selectionBackground:'#264f78',black:'#0d1117',red:'#f85149',green:'#3fb950',yellow:'#d29922',blue:'#58a6ff',magenta:'#bc8cff',cyan:'#39c5cf',white:'#e6edf3',brightBlack:'#484f58',brightRed:'#f85149',brightGreen:'#3fb950',brightYellow:'#d29922',brightBlue:'#58a6ff',brightMagenta:'#bc8cff',brightCyan:'#39c5cf',brightWhite:'#e6edf3'},fontFamily:'Cascadia Code,Fira Code,SF Mono,Menlo,monospace',fontSize:14,lineHeight:1.2,cursorBlink:true,cursorStyle:'bar',scrollback:5000,convertEol:true});fitAddon=new FitAddon.FitAddon();term.loadAddon(fitAddon);term.open(document.getElementById('xtermContainer'));setTimeout(function(){try{fitAddon.fit()}catch(e){}},200);var hi=document.getElementById('hiddenInput'),xe=document.getElementById('xtermContainer');xe.addEventListener('click',function(){hi.focus()});xe.addEventListener('touchend',function(){setTimeout(function(){hi.focus()},50)});hi.addEventListener('input',function(e){var t=e.target.value;if(t&&wsConnected){ws.send(JSON.stringify({type:'input',data:t}));e.target.value=''}});hi.addEventListener('keydown',function(e){if(!wsConnected)return;if(e.key==='Enter'){ws.send(JSON.stringify({type:'input',data:'\r'}));e.preventDefault();e.target.value=''}else if(e.key==='Backspace'){ws.send(JSON.stringify({type:'input',data:'\x7f'}));e.preventDefault()}
+});term.onData(function(d){if(wsConnected)ws.send(JSON.stringify({type:'input',data:d}))});term.onResize(function(s){if(wsConnected)ws.send(JSON.stringify({type:'resize',cols:s.cols,rows:s.rows}))});window.addEventListener('resize',function(){if(fitAddon)try{fitAddon.fit()}catch(e){}})}
+function connectWS(){var p=location.protocol==='https:'?'wss:':'ws:';ws=new WebSocket(p+'//'+location.host+'/ws/terminal');ws.onopen=function(){wsConnected=true;updateConn('ok')};ws.onmessage=function(ev){try{var m=JSON.parse(ev.data);if(m.type==='data'&&term){term.write(m.data);var o=document.getElementById('terminalOverlay');if(o)o.style.display='none'}else if(m.type==='exit'&&term){term.write('\r\n\x1b[31m['+_t.processExit+']\x1b[0m\r\n')}}catch(e){}};ws.onclose=function(){wsConnected=false;updateConn('err');setTimeout(connectWS,3000)};ws.onerror=function(){}}
+function updateConn(s){var d=document.getElementById('connDot'),b=document.getElementById('statusBadge');if(s==='ok'){d.className='status-dot dot-green';b.textContent=_t.connected}else{d.className='status-dot dot-red';b.textContent=_t.disconnected}
+}
+function sendText(){var i=document.getElementById('inputText'),t=i.value;if(!t)return;if(wsConnected)ws.send(JSON.stringify({type:'input',data:t+'\r'}));i.value='';document.getElementById('hiddenInput').focus()}
+document.getElementById('inputText').addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();sendText()}
+});
+var km={'Escape':'\x1b','C-c':'\x03','Enter':'\r','Tab':'\t','Up':'\x1b[A','Down':'\x1b[B','Left':'\x1b[D','Right':'\x1b[C'};
+function sendKey(k){var s=km[k];if(s&&wsConnected)ws.send(JSON.stringify({type:'input',data:s}))}
+async function startTerminal(){var o=document.getElementById('terminalOverlay');o.innerHTML='<button class="start-btn" disabled>'+_t.starting+'</button>';try{var r=await fetch('/api/terminal/start',{method:'POST'});var d=await r.json();if(d.status==='started'||d.status==='already_running')o.style.display='none';else o.innerHTML='<button class="start-btn" onclick="startTerminal()">'+_t.startFail+'</button>'}catch(e){o.innerHTML='<button class="start-btn" onclick="startTerminal()">'+_t.connFail+'</button>'}
+}
+var vr=null,va=false,vs=('webkitSpeechRecognition' in window||'SpeechRecognition' in window);
+function toggleVoice(){if(!vs){alert(_t.voiceNotSupport);return}if(va)stopVoice();else startVoice()}
+function startVoice(){var SR=window.SpeechRecognition||window.webkitSpeechRecognition;vr=new SR();vr.lang='zh-CN';vr.continuous=true;vr.interimResults=true;vr.onresult=function(ev){for(var i=ev.resultIndex;i<ev.results.length;i++){var t=ev.results[i][0].transcript;if(ev.results[i].isFinal&&t.trim()&&wsConnected){ws.send(JSON.stringify({type:'input',data:t}));if(term)term.write('\x1b[90m'+_t.voiceLabel+t+'\x1b[0m')}}
+};vr.onerror=function(ev){if(ev.error==='network'&&term)term.write('\r\n\x1b[31m['+_t.voiceErr+']\x1b[0m\r\n');if(ev.error!=='no-speech')stopVoice()};vr.onend=function(){if(va&&vr)try{vr.start()}catch(e){}
+};try{vr.start();va=true;var b=document.getElementById('voiceBtn');b.style.background='rgba(248,81,73,0.2)';b.style.borderColor='var(--red)';b.textContent='REC';if(term)term.write('\x1b[90m['+_t.voiceStart+']\x1b[0m\r\n')}catch(e){}}
+function stopVoice(){va=false;if(vr){try{vr.stop()}catch(e){};vr=null}var b=document.getElementById('voiceBtn');b.style.background='';b.style.borderColor='';b.textContent='MIC';if(term)term.write('\x1b[90m['+_t.voiceStop+']\x1b[0m\r\n')}
+function updateDashboard(){fetch('/api/status').then(function(r){return r.json()}).then(function(d){var s=document.getElementById('statusText');s.textContent=d.status==='running'?_t.running:d.status==='error'?_t.error:_t.idle;s.style.color=d.status==='running'?'var(--green)':d.status==='error'?'var(--red)':'var(--text2)';var m=Math.floor(d.uptime/60),sc=Math.floor(d.uptime%60);document.getElementById('uptimeText').textContent=m+':'+String(sc).padStart(2,'0');document.getElementById('totalTools').textContent=d.total_tools;document.getElementById('eventCount').textContent=d.event_count;var tl=document.getElementById('toolList');if(Object.keys(d.tool_counts).length===0)tl.innerHTML='<div style="color:var(--text2);font-size:12px;text-align:center;padding:12px;">'+_t.waiting+'</div>';else tl.innerHTML=Object.entries(d.tool_counts).sort(function(a,b){return b[1]-a[1]}).map(function(e){return '<div class="tool-item"><span>'+e[0]+'</span><span class="tool-count">'+e[1]+'</span></div>'}).join('')}).catch(function(){})
+}
+function connectSSE(){var es=new EventSource('/api/events');es.onmessage=function(e){try{var d=JSON.parse(e.data);addEvent(d);updateDashboard()}catch(err){}
+};es.onerror=function(){es.close();setTimeout(connectSSE,5000)}}
+function addEvent(data){var list=document.getElementById('eventList'),type=data.event||'unknown';var cls='ev-tool';if(type==='Stop')cls='ev-stop';else if(type.indexOf('start')>=0)cls='ev-start';else if(type==='user_input')cls='ev-input';var desc=data.tool?_t.toolPrefix+data.tool:data.message||data.text||type;var div=document.createElement('div');div.className='event-item';div.innerHTML='<span class="event-time">'+(data.time_str||'--:--:--')+'</span><span class="event-type '+cls+'">'+type+'</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+desc+'</span>';list.insertBefore(div,list.firstChild);while(list.children.length>100)list.removeChild(list.lastChild)}
+initTerminal();connectWS();connectSSE();updateDashboard();setInterval(updateDashboard,5000);
+fetch('/api/status').then(function(r){return r.json()}).then(function(d){if(d.terminal_running)document.getElementById('terminalOverlay').style.display='none'});
+</script>
+</body>
+</html>
